@@ -78,9 +78,9 @@ for message in st.session_state.messages:
 st.markdown("---")
 with st.container():
     # ALLOW MULTIPLE FILES
-    img_files = st.file_uploader("📸 Upload Lab Photos (Multiple allowed)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+    img_files = st.file_uploader("📸 Upload Lab Photos", type=['png', 'jpg', 'jpeg', 'webp'], accept_multiple_files=True)
     audio_input = st.audio_input("🎤 Speak to Assistant")
-    chat_input = st.chat_input("Type a question...")
+    chat_input = st.chat_input("What's on ya mind...")
 
 # --- 8. LOGIC ---
 if chat_input or img_files or audio_input:
