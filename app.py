@@ -55,8 +55,7 @@ def get_tts_audio(text):
     return audio_data.getvalue()
 
 # --- 6. UI & SESSION STATE ---
-st.title("🥽 AI Lab Assistant")
-st.markdown("### *'Advancing science, one safe step at a time.'*")
+
 st.title("👋 Welcome to the AI Lab Assistant!")
 st.subheader("Your guide to safe and successful experiments.")
 st.markdown("""
