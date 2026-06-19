@@ -95,9 +95,9 @@ for message in st.session_state.messages:
 st.markdown("---")
 # Container for inputs to keep them together
 with st.container():
-    img_file = st.file_uploader("📸 Identify Equipment (Upload/Take Photo)", type=['png', 'jpg', 'jpeg'])
+    img_file = st.file_uploader("📸 Identify Equipment (Upload/Take Photo)", type=['png', 'jpg', 'jpeg','webp'])
     audio_input = st.audio_input("🎤 Ask via Voice")
-    chat_input = st.chat_input("Type your question here (e.g., 'How do I use a burette?')")
+    chat_input = st.chat_input("Type your question here (e.g., 'How do I use a multimeter?')")
 
 # --- 8. LOGIC: PROCESSING INPUTS ---
 if chat_input or img_file or audio_input:
