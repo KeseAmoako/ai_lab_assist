@@ -14,7 +14,7 @@ st.set_page_config(page_title="AI Lab Assistant", page_icon="🥽", layout="wide
 st.markdown("""
     <style>
     .stChatMessage { border-radius: 15px; margin-bottom: 10px; }
-    [data-testid="stSidebar"] { background-color: black; border-right: 1px solid #e0e0e0; }
+    [data-testid="stSidebar"] { background-color: light black; border-right: 1px solid #e0e0e0; }
     .chat-sidebar-item { padding: 10px; border-radius: 5px; margin-bottom: 5px; cursor: pointer; }
     </style>
 """, unsafe_allow_html=True)
@@ -28,6 +28,7 @@ else:
 
 # --- 3. SESSION STATE INITIALIZATION ---
 # We store multiple chats in a dictionary: { "Chat ID": { "name": "Lab 1", "messages": [] } }
+
 if "chats" not in st.session_state:
     default_id = str(uuid.uuid4())
     st.session_state.chats = {
@@ -64,7 +65,7 @@ with st.sidebar:
     st.title("📓 Lab Notebooks")
     
     # Create New Chat
-    new_chat_name = st.text_input("New Experiment Name:", placeholder="e.g. Titration Lab")
+    new_chat_name = st.text_input("New Experiment Name:", placeholder="e.g. ELECTRONICS LAB")
     if st.button("➕ Start New Chat", use_container_width=True):
         if new_chat_name:
             new_id = str(uuid.uuid4())
@@ -99,6 +100,12 @@ with st.sidebar:
 
 # --- 7. MAIN UI ---
 current_chat = st.session_state.chats[st.session_state.current_chat_id]
+st.markdown("""
+    <div style="text-align: center; padding: 10px 0px 30px 0px;">
+        <h1 style="color: #2e7d32; font-size: 42px; margin-bottom: 5px;">🧪 Hello, Scientist!</h1>
+        <p style="font-size: 18px; color: #555;">Ready to explore? Make sure to wear your safety goggles! 🥽</p>
+    </div>
+""", unsafe_allow_html=True)
 
 st.markdown(f"### 🧪 Currently Assisting: **{current_chat['name']}**")
 
