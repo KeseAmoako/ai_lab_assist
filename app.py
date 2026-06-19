@@ -5,81 +5,50 @@ import asyncio
 import os
 from PIL import Image
 import io
+import uuid
 
 # --- 1. CONFIGURATION & SETUP ---
-st.set_page_config(
-    page_title="AI Lab Assistant", 
-    page_icon="🥽", 
-    layout="centered"
-)
+st.set_page_config(page_title="AI Lab Assistant", page_icon="🥽", layout="wide")
 
-# Custom CSS for a clean look
+# Custom CSS for Sidebar and Chat styling
 st.markdown("""
     <style>
     .stChatMessage { border-radius: 15px; margin-bottom: 10px; }
-    .stAlert { border-radius: 10px; }
+    [data-testid="stSidebar"] { background-color: #f8f9fa; border-right: 1px solid #e0e0e0; }
+    .chat-sidebar-item { padding: 10px; border-radius: 5px; margin-bottom: 5px; cursor: pointer; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- 2. API KEY SECURITY ---
-# This automatically reads the API key you saved in the Streamlit Cloud Dashboard Secrets
 if "GOOGLE_API_KEY" in st.secrets:
     API_KEY = st.secrets["GOOGLE_API_KEY"]
 else:
-    st.error("🔒 Developer Warning: Please add 'GOOGLE_API_KEY' to your Streamlit Secrets Dashboard.")
+    st.error("🔒 Developer: Add 'GOOGLE_API_KEY' to Streamlit Secrets.")
     st.stop()
 
-# --- 3. SYSTEM PROMPT ---
-SYSTEM_INSTRUCTION = """
-You are the "AI Lab Assistant," a patient, encouraging, and extremely safety-conscious expert for science students.
-1. SAFETY FIRST: Remind students of PPE (goggles/gloves) if chemicals or heat are involved.
-2. If multiple images are uploaded, identify EACH piece of equipment or label clearly.
-3. Use bullet points for steps. Keep explanations simple for novices.
-"""
+# --- 3. SESSION STATE INITIALIZATION ---
+# We store multiple chats in a dictionary: { "Chat ID": { "name": "Lab 1", "messages": [] } }
+if "chats" not in st.session_state:
+    default_id = str(uuid.uuid4())
+    st.session_state.chats = {
+        default_id: {"name": "General Lab Help", "messages": []}
+    }
+    st.session_state.current_chat_id = default_id
 
-# --- 4. SELF-HEALING MODEL INITIALIZATION ---
+# --- 4. MODEL INITIALIZATION ---
 @st.cache_resource
 def init_model():
-    """Programmatically detects available models so the app never throws a 404 again."""
     genai.configure(api_key=API_KEY)
-    try:
-        # Get all models supported by your API key
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # 1. Try modern stable models first
-        priority_models = [
-            "models/gemini-2.5-flash",
-            "models/gemini-3.5-flash",
-            "models/gemini-1.5-flash"
-        ]
-        
-        selected_model = None
-        for model_name in priority_models:
-            if model_name in available_models:
-                selected_model = model_name
-                break
-        
-        # 2. Dynamic fallback: pick any model that contains "flash" in the name
-        if not selected_model:
-            flash_models = [m for m in available_models if "flash" in m.lower()]
-            if flash_models:
-                selected_model = flash_models[0]
-                
-        # 3. Hard fallback if list fails or no matches found
-        if not selected_model:
-            selected_model = "models/gemini-2.5-flash"
-            
-        return genai.GenerativeModel(model_name=selected_model, system_instruction=SYSTEM_INSTRUCTION)
-        
-    except Exception:
-        # Default safety fallback
-        return genai.GenerativeModel(model_name="models/gemini-2.5-flash", system_instruction=SYSTEM_INSTRUCTION)
+    # Self-healing model selection
+    return genai.GenerativeModel(
+        model_name="gemini-1.5-flash-latest", # Or gemini-2.5-flash if available in your region
+        system_instruction="You are a safety-first AI Lab Assistant. Use bullet points and prioritize PPE. Identify equipment in photos clearly."
+    )
 
 model = init_model()
 
-# --- 5. AUDIO TTS HELPER ---
+# --- 5. AUDIO HELPER ---
 def get_tts_audio(text):
-    """Converts the AI response into natural sounding speech."""
     clean_text = text.replace("*", "").replace("#", "").replace("- ", "")
     communicate = edge_tts.Communicate(clean_text, "en-US-GuyNeural")
     audio_data = io.BytesIO()
@@ -90,19 +59,51 @@ def get_tts_audio(text):
     asyncio.run(run_tts())
     return audio_data.getvalue()
 
-# --- 6. GREETING & CHAT HISTORY ---
-st.markdown("""
-    <div style="text-align: center; padding: 10px 0px 30px 0px;">
-        <h1 style="color: #2e7d32; font-size: 42px; margin-bottom: 5px;">🧪 Hello, Scientist!</h1>
-        <p style="font-size: 18px; color: #555;">Ready to explore? Make sure to wear your safety goggles! 🥽</p>
-    </div>
-""", unsafe_allow_html=True)
+# --- 6. SIDEBAR: CHAT MANAGEMENT ---
+with st.sidebar:
+    st.title("📓 Lab Notebooks")
+    
+    # Create New Chat
+    new_chat_name = st.text_input("New Experiment Name:", placeholder="e.g. Titration Lab")
+    if st.button("➕ Start New Chat", use_container_width=True):
+        if new_chat_name:
+            new_id = str(uuid.uuid4())
+            st.session_state.chats[new_id] = {"name": new_chat_name, "messages": []}
+            st.session_state.current_chat_id = new_id
+            st.rerun()
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.divider()
+    
+    # List Existing Chats
+    st.write("**Recent Experiments**")
+    for chat_id, chat_data in list(st.session_state.chats.items()):
+        col1, col2 = st.columns([0.8, 0.2])
+        if col1.button(chat_data["name"], key=f"select_{chat_id}", use_container_width=True):
+            st.session_state.current_chat_id = chat_id
+            st.rerun()
+        if col2.button("🗑️", key=f"del_{chat_id}"):
+            if len(st.session_state.chats) > 1:
+                del st.session_state.chats[chat_id]
+                st.session_state.current_chat_id = list(st.session_state.chats.keys())[0]
+                st.rerun()
+            else:
+                st.warning("Keep at least one chat.")
 
-# Display previous messages
-for message in st.session_state.messages:
+    st.divider()
+    voice_enabled = st.toggle("🔊 Voice Response", value=True)
+    
+    if st.button("⚠️ Clear All Notebooks", type="primary", use_container_width=True):
+        st.session_state.chats = {str(uuid.uuid4()): {"name": "General Lab Help", "messages": []}}
+        st.session_state.current_chat_id = list(st.session_state.chats.keys())[0]
+        st.rerun()
+
+# --- 7. MAIN UI ---
+current_chat = st.session_state.chats[st.session_state.current_chat_id]
+
+st.markdown(f"### 🧪 Currently Assisting: **{current_chat['name']}**")
+
+# Display Messages from Current Chat
+for message in current_chat["messages"]:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
         if "images" in message:
@@ -110,47 +111,31 @@ for message in st.session_state.messages:
             for idx, img in enumerate(message["images"]):
                 cols[idx % 4].image(img, use_container_width=True)
 
-# Sidebar utilities
-with st.sidebar:
-    st.title("🥽 Lab Controller")
-    voice_enabled = st.toggle("Voice Mode (AI speaks back)", value=True)
-    if st.button("Clear Lab Notebook (History)"):
-        st.session_state.messages = []
-        st.rerun()
-
-# --- 7. MULTI-INPUT CONTROLS ---
+# --- 8. INPUT AND LOGIC ---
 st.markdown("---")
-with st.container():
-    # File uploader with multiple image capability
-    img_files = st.file_uploader(
-        "📸 Upload Photos (Select multiple lab equipment pictures at once)", 
-        type=['png', 'jpg', 'jpeg'], 
-        accept_multiple_files=True
-    )
-    audio_input = st.audio_input("🎤 Describe your experiment or ask a question")
-    chat_input = st.chat_input("What's on ya mind...")
+img_files = st.file_uploader("📸 Upload Equipment Photos", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+audio_input = st.audio_input("🎤 Ask via Voice")
+chat_input = st.chat_input("Ask a lab question...")
 
-# --- 8. LOGIC PROCESSING ---
 if chat_input or img_files or audio_input:
     prompt_parts = []
     current_images = []
+    user_text = chat_input if chat_input else "Analyze the uploaded files."
     
-    # Text input
-    user_text = chat_input if chat_input else "Please analyze the uploaded lab equipment."
+    # Gather context from previous messages in THIS chat (Memory)
+    # We pass the last 5 messages for context
+    history_context = current_chat["messages"][-5:]
+    
     prompt_parts.append(user_text)
-    
-    # Process multiple images
     if img_files:
-        for uploaded_file in img_files:
-            img = Image.open(uploaded_file)
+        for f in img_files:
+            img = Image.open(f)
             current_images.append(img)
             prompt_parts.append(img)
-            
-    # Process voice input
     if audio_input:
         prompt_parts.append({"mime_type": "audio/wav", "data": audio_input.read()})
 
-    # Show User's input immediately in UI
+    # UI Update
     with st.chat_message("user"):
         st.markdown(user_text)
         if current_images:
@@ -158,28 +143,17 @@ if chat_input or img_files or audio_input:
             for idx, img in enumerate(current_images):
                 cols[idx % 4].image(img, use_container_width=True)
 
-    # Generate Assistant's reply
     with st.chat_message("assistant"):
-        with st.spinner("Reviewing safety protocol..."):
-            try:
-                response = model.generate_content(prompt_parts)
-                response_text = response.text
-                
-                st.markdown(response_text)
-                
-                # Speak if voice mode is on
-                if voice_enabled:
-                    st.audio(get_tts_audio(response_text), format="audio/mp3", autoplay=True)
-                
-                # Save to memory
-                st.session_state.messages.append({
-                    "role": "user", 
-                    "content": user_text, 
-                    "images": current_images
-                })
-                st.session_state.messages.append({
-                    "role": "assistant", 
-                    "content": response_text
-                })
-            except Exception as e:
-                st.error(f"Something went wrong: {e}")
+        try:
+            response = model.generate_content(prompt_parts)
+            st.markdown(response.text)
+            
+            if voice_enabled:
+                st.audio(get_tts_audio(response.text), format="audio/mp3", autoplay=True)
+            
+            # Save to the specific chat in session state
+            current_chat["messages"].append({"role": "user", "content": user_text, "images": current_images})
+            current_chat["messages"].append({"role": "assistant", "content": response.text})
+            
+        except Exception as e:
+            st.error(f"Error: {e}")
