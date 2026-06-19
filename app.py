@@ -7,181 +7,121 @@ from PIL import Image
 import io
 
 # --- 1. CONFIGURATION & SETUP ---
-st.set_page_config(
-    page_title="AI Lab Assistant",
-    page_icon="🥽",
-    layout="centered"
-)
+st.set_page_config(page_title="AI Lab Assistant", page_icon="🥽", layout="centered")
 
-# Custom CSS for a clean, academic look
-st.markdown("""
-    <style>
-    .stChatMessage { border-radius: 15px; margin-bottom: 10px; }
-    .safety-warning { 
-        background-color: #ff4b4b22; 
-        border: 1px solid #ff4b4b; 
-        padding: 10px; 
-        border-radius: 5px; 
-        color: #ff4b4b;
-        font-weight: bold;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# --- 2. API KEY SECURITY ---
+# This looks for a Secret called "GOOGLE_API_KEY" in your Streamlit Dashboard
+if "GOOGLE_API_KEY" in st.secrets:
+    API_KEY = st.secrets["GOOGLE_API_KEY"]
+else:
+    st.error("Developer: Please add 'GOOGLE_API_KEY' to your Streamlit Secrets.")
+    st.stop()
 
-# --- 2. SYSTEM PROMPT ---
+# --- 3. SYSTEM PROMPT ---
 SYSTEM_INSTRUCTION = """
 You are the "AI Lab Assistant," a patient, encouraging, and extremely safety-conscious expert for science students.
-CORE RULES:
-1. SAFETY FIRST: Before providing instructions, briefly remind the student of required PPE (goggles, gloves, lab coat) if the context involves chemicals or heat.
-2. If a student describes a dangerous action (e.g., "smelling a chemical directly" or "pouring water into acid"), stop them immediately and explain the correct safety procedure (e.g., "wafting" or "Acid to Water").
-3. FORMATTING: Use clear, numbered steps for protocols. Use bold text for equipment names.
-4. TONE: Be supportive. If they are confused, explain concepts using simple analogies.
-5. MULTIMODAL: If an image is provided, identify the equipment or chemical label clearly and explain its function.
+1. SAFETY FIRST: Remind students of PPE (goggles/gloves) if chemicals or heat are involved.
+2. If multiple images are uploaded, identify EACH piece of equipment or label clearly.
+3. Use bullet points for steps. Keep explanations simple for novices.
 """
 
-# --- 3. HELPER FUNCTIONS ---
+# --- 4. MODEL INITIALIZATION (UNIVERSAL FINDER) ---
+@st.cache_resource
+def init_model():
+    genai.configure(api_key=API_KEY)
+    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    
+    # Order of preference
+    selected_name = "models/gemini-1.5-flash-latest" # Default
+    for pref in ["models/gemini-1.5-flash-latest", "models/gemini-1.5-flash", "models/gemini-pro"]:
+        if pref in available_models:
+            selected_name = pref
+            break
+            
+    return genai.GenerativeModel(model_name=selected_name, system_instruction=SYSTEM_INSTRUCTION)
 
+model = init_model()
+
+# --- 5. HELPER FUNCTIONS ---
 def get_tts_audio(text):
-    """Converts text to speech using Edge-TTS (high quality, free)."""
-    # Filter out markdown symbols for cleaner speech
     clean_text = text.replace("*", "").replace("#", "").replace("- ", "")
     communicate = edge_tts.Communicate(clean_text, "en-US-GuyNeural")
-    
-    # Save to a byte stream
     audio_data = io.BytesIO()
     async def run_tts():
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
                 audio_data.write(chunk["data"])
-    
     asyncio.run(run_tts())
     return audio_data.getvalue()
 
-# --- 4. SIDEBAR & SESSION STATE ---
-with st.sidebar:
-    st.title("🧪 Lab Settings")
-    api_key = st.text_input("Enter Google API Key:", type="password")
-    st.info("Get a key at [aistudio.google.com](https://aistudio.google.com/)")
-    
-    voice_enabled = st.toggle("Voice Mode (AI speaks back)", value=True)
-    
-    if st.button("Clear Lab Notebook (History)"):
-        st.session_state.messages = []
-        st.rerun()
-
+# --- 6. UI & SESSION STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- 5. INITIALIZE AI MODEL ---
-if api_key:
-    try:
-        genai.configure(api_key=api_key)
-        
-        # This part asks Google which models you are allowed to use
-        available_models = [m.name for m in genai.list_models() 
-                            if 'generateContent' in m.supported_generation_methods]
-        
-        if not available_models:
-            st.error("No models found for this API key. Please check your Google AI Studio project.")
-            st.stop()
+with st.sidebar:
+    st.title("🧪 Lab Assistant")
+    voice_enabled = st.toggle("Voice Mode (AI speaks)", value=True)
+    if st.button("Clear History"):
+        st.session_state.messages = []
+        st.rerun()
 
-        # Search for the best available model in order of preference
-        selected_model_name = None
-        for preference in ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-pro"]:
-            if preference in available_models:
-                selected_model_name = preference
-                break
-        
-        # If none of those are found, just take the first available one
-        if not selected_model_name:
-            selected_model_name = available_models[0]
-
-        st.sidebar.success(f"Connected to: {selected_model_name}")
-        
-        model = genai.GenerativeModel(
-            model_name=selected_model_name,
-            system_instruction=SYSTEM_INSTRUCTION
-        )
-    except Exception as e:
-        st.error(f"Connection Error: {str(e)}")
-        st.stop()
-else:
-    st.warning("Please enter your Google API Key in the sidebar to begin.")
-    st.stop()
-
-# --- 6. UI: CHAT HISTORY ---
+# Display chat history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
-        if "image" in message:
-            st.image(message["image"], caption="Uploaded Image", width=300)
+        if "images" in message:
+            cols = st.columns(len(message["images"]))
+            for idx, img in enumerate(message["images"]):
+                cols[idx].image(img, width=150)
 
-# --- 7. UI: INPUT AREA ---
+# --- 7. MULTI-INPUT AREA ---
 st.markdown("---")
-# Container for inputs to keep them together
 with st.container():
-    img_file = st.file_uploader("📸 Identify Equipment (Upload/Take Photo)", type=['png', 'jpg', 'jpeg','webp'])
-    audio_input = st.audio_input("🎤 Ask via Voice")
-    chat_input = st.chat_input("Type your question here (e.g., 'How do I use a multimeter?')")
+    # ALLOW MULTIPLE FILES
+    img_files = st.file_uploader("📸 Upload Lab Photos (Multiple allowed)", type=['png', 'jpg', 'jpeg'], accept_multiple_files=True)
+    audio_input = st.audio_input("🎤 Speak to Assistant")
+    chat_input = st.chat_input("Type a question...")
 
-# --- 8. LOGIC: PROCESSING INPUTS ---
-if chat_input or img_file or audio_input:
-    
-    # Initialize prompt components
+# --- 8. LOGIC ---
+if chat_input or img_files or audio_input:
     prompt_parts = []
+    current_images = []
     
-    # 1. Handle Text
-    user_content = chat_input if chat_input else "What am I looking at/listening to?"
-    prompt_parts.append(user_content)
+    # Process text
+    user_text = chat_input if chat_input else "Please analyze the uploaded content."
+    prompt_parts.append(user_text)
     
-    # 2. Handle Image
-    raw_image = None
-    if img_file:
-        raw_image = Image.open(img_file)
-        prompt_parts.append(raw_image)
-    
-    # 3. Handle Audio Input (STT via Gemini's multimodal capability)
+    # Process multiple images
+    if img_files:
+        for uploaded_file in img_files:
+            img = Image.open(uploaded_file)
+            current_images.append(img)
+            prompt_parts.append(img)
+            
+    # Process audio
     if audio_input:
-        # Gemini 1.5 can process audio bytes directly
-        audio_bytes = audio_input.read()
-        prompt_parts.append({"mime_type": "audio/wav", "data": audio_bytes})
+        prompt_parts.append({"mime_type": "audio/wav", "data": audio_input.read()})
 
-    # Display user message
+    # Show user input
     with st.chat_message("user"):
-        st.markdown(user_content)
-        if raw_image:
-            st.image(raw_image, width=300)
-        if audio_input:
-            st.audio(audio_input)
+        st.markdown(user_text)
+        if current_images:
+            cols = st.columns(len(current_images))
+            for idx, img in enumerate(current_images):
+                cols[idx].image(img, width=150)
 
-    # Generate AI Response
+    # Generate Response
     with st.chat_message("assistant"):
-        with st.spinner("Consulting Lab Manual..."):
+        with st.spinner("Analyzing..."):
             try:
-                # Add history context (simplification: last 4 messages to save tokens)
-                # In a production app, you'd format st.session_state.messages for the model
                 response = model.generate_content(prompt_parts)
-                response_text = response.text
+                st.markdown(response.text)
                 
-                st.markdown(response_text)
-                
-                # Handle Voice Output
                 if voice_enabled:
-                    audio_output = get_tts_audio(response_text)
-                    st.audio(audio_output, format="audio/mp3", autoplay=True)
+                    st.audio(get_tts_audio(response.text), format="audio/mp3", autoplay=True)
                 
                 # Save to history
-                history_entry = {"role": "assistant", "content": response_text}
-                if raw_image:
-                    history_entry["image"] = raw_image
-                st.session_state.messages.append({"role": "user", "content": user_content})
-                st.session_state.messages.append(history_entry)
-                
+                st.session_state.messages.append({"role": "user", "content": user_text, "images": current_images})
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
             except Exception as e:
-                st.error(f"Error: {str(e)}")
-                st.info("Check if your API key is correct or if the file format is supported.")
-
-
-
-
-
+                st.error(f"Error: {e}")
