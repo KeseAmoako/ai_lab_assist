@@ -128,7 +128,7 @@ with st.container():
         accept_multiple_files=True
     )
     audio_input = st.audio_input("🎤 Describe your experiment or ask a question")
-    chat_input = st.chat_input("Type your question here...")
+    chat_input = st.chat_input("What's on ya mind...")
 
 # --- 8. LOGIC PROCESSING ---
 if chat_input or img_files or audio_input:
