@@ -75,11 +75,19 @@ if "messages" not in st.session_state:
 # --- 5. INITIALIZE AI MODEL ---
 if api_key:
     genai.configure(api_key=api_key)
-    # Using gemini-1.5-flash for speed and multimodal capabilities
-    model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
-        system_instruction=SYSTEM_INSTRUCTION
-    )
+    try:
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash-latest",
+            system_instruction=SYSTEM_INSTRUCTION
+        )
+        # Test if the model is reachable
+        model.generate_content("ping") 
+    except Exception:
+        # Fallback for older library versions
+        model = genai.GenerativeModel(
+            model_name="gemini-pro", 
+            system_instruction=SYSTEM_INSTRUCTION
+        )
 else:
     st.warning("Please enter your Google API Key in the sidebar to begin.")
     st.stop()
