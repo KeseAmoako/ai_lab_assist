@@ -77,7 +77,7 @@ if api_key:
     genai.configure(api_key=api_key)
     # Using gemini-1.5-flash for speed and multimodal capabilities
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash-latest",
+        model_name="gemini-1.5-flash",
         system_instruction=SYSTEM_INSTRUCTION
     )
 else:
