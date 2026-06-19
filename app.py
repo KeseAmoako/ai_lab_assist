@@ -55,6 +55,20 @@ def get_tts_audio(text):
     return audio_data.getvalue()
 
 # --- 6. UI & SESSION STATE ---
+st.title("🥽 AI Lab Assistant")
+st.markdown("### *'Advancing science, one safe step at a time.'*")
+st.title("👋 Welcome to the AI Lab Assistant!")
+st.subheader("Your guide to safe and successful experiments.")
+st.markdown("""
+    <div style="text-align: center; padding: 20px;">
+        <h1 style="color: #007bff; font-size: 50px;">🧪 Hello, Scientist!</h1>
+        <p style="font-size: 20px; color: #555;">Ready to explore? Don't forget your goggles! 🥽</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# Optional: A nice status badge
+st.info("💡 Tip: You can upload photos of equipment or speak directly to me for help.")
+
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
