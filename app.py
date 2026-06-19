@@ -74,20 +74,37 @@ if "messages" not in st.session_state:
 
 # --- 5. INITIALIZE AI MODEL ---
 if api_key:
-    genai.configure(api_key=api_key)
     try:
+        genai.configure(api_key=api_key)
+        
+        # This part asks Google which models you are allowed to use
+        available_models = [m.name for m in genai.list_models() 
+                            if 'generateContent' in m.supported_generation_methods]
+        
+        if not available_models:
+            st.error("No models found for this API key. Please check your Google AI Studio project.")
+            st.stop()
+
+        # Search for the best available model in order of preference
+        selected_model_name = None
+        for preference in ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-pro"]:
+            if preference in available_models:
+                selected_model_name = preference
+                break
+        
+        # If none of those are found, just take the first available one
+        if not selected_model_name:
+            selected_model_name = available_models[0]
+
+        st.sidebar.success(f"Connected to: {selected_model_name}")
+        
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash-latest",
+            model_name=selected_model_name,
             system_instruction=SYSTEM_INSTRUCTION
         )
-        # Test if the model is reachable
-        model.generate_content("ping") 
-    except Exception:
-        # Fallback for older library versions
-        model = genai.GenerativeModel(
-            model_name="gemini-pro", 
-            system_instruction=SYSTEM_INSTRUCTION
-        )
+    except Exception as e:
+        st.error(f"Connection Error: {str(e)}")
+        st.stop()
 else:
     st.warning("Please enter your Google API Key in the sidebar to begin.")
     st.stop()
